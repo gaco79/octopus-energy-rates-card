@@ -38,7 +38,7 @@ class OctopusEnergyRatesCard extends LitElement {
         showday: true,
         hour12: true,
         roundUnits: 2,
-        unitstr: "p/kWh",
+        unitstr: "",
         multiplier: 100,
       },
       colours: {
@@ -53,6 +53,7 @@ class OctopusEnergyRatesCard extends LitElement {
         medium: 0.25,
         high: 0.35,
       },
+      targetTimes: [],
     };
   }
 
@@ -67,13 +68,14 @@ class OctopusEnergyRatesCard extends LitElement {
       display: {
         cols: 1,
         showpast: false,
-        showday: true,
-        hour12: true,
-        roundUnits: 2,
-        unitstr: "p/kWh",
+        showday: false,
+        hour12: false,
+        roundUnits: 1,
+        unitstr: "",
         multiplier: 100,
       },
       colours: {
+        negative: "#391CD9",
         low: "#4CAF50", // MediumSeaGreen
         medium: "#FFA500", // Orange
         high: "#FF6347", // Tomato
@@ -106,12 +108,14 @@ class OctopusEnergyRatesCard extends LitElement {
       }
       table {
         width: 100%;
-        border-spacing: 0;
+        border-spacing: 0 1px;
         border-collapse: separate;
       }
       td {
         padding: 4px;
         text-align: center;
+        border-bottom-width: 1px;
+        border-bottom-style: solid;
       }
       .rate {
         color: white;
@@ -207,27 +211,65 @@ class OctopusEnergyRatesCard extends LitElement {
   renderRateRow(rate) {
     const { hour12, showday, unitstr, roundUnits, multiplier } =
       this._config.display;
+
     const startDate = new Date(rate.start);
+    const endDate = new Date(rate.end);
+
     const formattedTime = startDate.toLocaleTimeString(navigator.language, {
       hour: "numeric",
       minute: "2-digit",
       hour12,
     });
+
     const formattedDay = showday
       ? startDate.toLocaleDateString(navigator.language, { weekday: "short" }) +
         " "
       : "";
     const rateValue = (rate.value_inc_vat * multiplier).toFixed(roundUnits);
+
     const color = this.getRateColor(rate.value_inc_vat);
+    const color_string = `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
+
+    const targetTime = this.getTargetTime(startDate, endDate);
+
+    const style = `background-color: ${color_string}; border-color: ${color_string};`;
+
+    const prefix = targetTime ? targetTime.prefix : "";
 
     return html`
       <tr>
-        <td>${formattedDay}${formattedTime}</td>
-        <td class="rate" style="background-color: ${color}">
-          ${rateValue}${unitstr}
+        <td
+          style="border-image: linear-gradient(to right, var(--card-background-color) 20%, ${color_string} 100%) 1; text-align:right; padding-right:1rem;"
+        >
+          ${prefix ? html`<ha-icon icon="${prefix}"></ha-icon>` : ""}
+          ${formattedDay}${formattedTime}
         </td>
+        <td class="rate" style="${style}">${rateValue}${unitstr}</td>
       </tr>
     `;
+  }
+
+  getTargetTime(start, end) {
+    for (const tt of this._config.targetTimes) {
+      const entityState = this.hass.states[tt.entity];
+
+      if (entityState && entityState.attributes.target_times) {
+        const targetTimes = entityState.attributes.target_times;
+
+        for (const targetTime of targetTimes) {
+          const targetStart = new Date(targetTime.start);
+          const targetEnd = new Date(targetTime.end);
+
+          if (start >= targetStart && end <= targetEnd) {
+            return {
+              backgroundColor: tt.backgroundColor,
+              prefix: tt.prefix,
+            };
+          }
+        }
+      }
+    }
+    return null;
   }
 
   getRateColor(rate) {
@@ -254,6 +296,28 @@ class OctopusEnergyRatesCardEditor extends LitElement {
 
   setConfig(config) {
     this._config = { ...OctopusEnergyRatesCard.getDefaultConfig(), ...config };
+    this._config.targetTimes = this._config.targetTimes || [];
+  }
+
+  static get styles() {
+    return css`
+      .targetTimes {
+        border: 1px solid var(--divider-color);
+        padding: 10px;
+        margin-top: 10px;
+      }
+      .targetTime {
+        display: flex;
+        align-items: center;
+        margin-bottom: 10px;
+      }
+      .targetTime > * {
+        margin-right: 10px;
+      }
+      .targetTime ha-icon-button {
+        --mdc-icon-button-size: 24px;
+      }
+    `;
   }
 
   render() {
@@ -266,7 +330,7 @@ class OctopusEnergyRatesCardEditor extends LitElement {
         .hass=${this.hass}
         .data=${this._config}
         .schema=${[
-          { name: "title", selector: { text: {} } },
+          { name: "title", label: "Card Title", selector: { text: {} } },
           {
             type: "expandable",
             name: "entities",
@@ -275,16 +339,19 @@ class OctopusEnergyRatesCardEditor extends LitElement {
             schema: [
               {
                 name: "current",
-                selector: { entity: {} },
+                label: "Current Rates Entity",
+                selector: { entity: { filter: { domain: "event" } } },
                 required: true,
               },
               {
                 name: "past",
-                selector: { entity: {} },
+                label: "Past Rates Entity",
+                selector: { entity: { filter: { domain: "event" } } },
               },
               {
                 name: "future",
-                selector: { entity: {} },
+                label: "Future Rates Entity",
+                selector: { entity: { filter: { domain: "event" } } },
               },
             ],
           },
@@ -294,15 +361,42 @@ class OctopusEnergyRatesCardEditor extends LitElement {
             title: "Display Options",
             icon: "mdi:eye",
             schema: [
-              { name: "cols", selector: { number: { min: 1, max: 5 } } },
-              { name: "showpast", selector: { boolean: {} } },
-              { name: "showday", selector: { boolean: {} } },
-              { name: "hour12", selector: { boolean: {} } },
-              { name: "roundUnits", selector: { number: { min: 0, max: 3 } } },
-              { name: "unitstr", selector: { text: {} } },
               {
-                name: "multiplier",
-                selector: { number: { min: 1, max: 100 } },
+                type: "grid",
+                columns: 2,
+                schema: [
+                  {
+                    name: "cols",
+                    label: "Columns",
+                    selector: { number: { min: 1, max: 3 } },
+                  },
+                  {
+                    name: "roundUnits",
+                    label: "Decimal places",
+                    selector: { number: { min: 0, max: 3, mode: "slider" } },
+                  },
+                ],
+              },
+              {
+                type: "grid",
+                columns: 3,
+                schema: [
+                  {
+                    name: "showpast",
+                    label: "Show Past",
+                    selector: { boolean: {} },
+                  },
+                  {
+                    name: "showday",
+                    label: "Day Label",
+                    selector: { boolean: {} },
+                  },
+                  {
+                    name: "hour12",
+                    label: "12hr Time?",
+                    selector: { boolean: {} },
+                  },
+                ],
               },
             ],
           },
@@ -336,29 +430,35 @@ class OctopusEnergyRatesCardEditor extends LitElement {
             icon: "mdi:palette",
             schema: [
               {
-                name: "negative",
-                selector: { text: {} },
-                label: "Negative Rate Color (name or hex)",
-              },
-              {
-                name: "low",
-                selector: { text: {} },
-                label: "Low Rate Color (name or hex)",
-              },
-              {
-                name: "medium",
-                selector: { text: {} },
-                label: "Medium Rate Color (name or hex)",
-              },
-              {
-                name: "high",
-                selector: { text: {} },
-                label: "High Rate Color (name or hex)",
-              },
-              {
-                name: "highest",
-                selector: { text: {} },
-                label: "Highest Rate Color (name or hex)",
+                type: "grid",
+                columns: 3,
+                schema: [
+                  {
+                    name: "negative",
+                    selector: { color_rgb: {} },
+                    label: "Negative Rate",
+                  },
+                  {
+                    name: "low",
+                    selector: { color_rgb: {} },
+                    label: "Low Rate",
+                  },
+                  {
+                    name: "medium",
+                    selector: { color_rgb: {} },
+                    label: "Medium Rate",
+                  },
+                  {
+                    name: "high",
+                    selector: { color_rgb: {} },
+                    label: "High Rate",
+                  },
+                  {
+                    name: "highest",
+                    selector: { color_rgb: {} },
+                    label: "Highest Rate",
+                  },
+                ],
               },
             ],
           },
@@ -366,14 +466,112 @@ class OctopusEnergyRatesCardEditor extends LitElement {
         .computeLabel=${(schema) => schema.label || schema.name}
         @value-changed=${this._valueChanged}
       ></ha-form>
+      <div class="targetTimes">
+        <h3>Target Times</h3>
+        ${this._config.targetTimes.map((targetTime, index) =>
+          this._renderTargetTime(targetTime, index)
+        )}
+        <ha-icon-button
+          .path=${"M12,20C7.59,20 4,16.41 4,12C4,7.59 7.59,4 12,4C16.41,4 20,7.59 20,12C20,16.41 16.41,20 12,20M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M13,7H11V11H7V13H11V17H13V13H17V11H13V7Z"}
+          @click=${this._addTargetTime}
+        ></ha-icon-button>
+      </div>
     `;
   }
 
+  _renderTargetTime(targetTime, index) {
+    return html`
+      <div class="targetTime">
+        <ha-entity-picker
+          .hass=${this.hass}
+          .value=${targetTime.entity}
+          .includeDomains=${["binary_sensor"]}
+          @change=${(e) =>
+            this._updateTargetTime(index, "entity", e.target.value)}
+        ></ha-entity-picker>
+        <ha-textfield
+          .value=${targetTime.backgroundColor}
+          label="Background Color"
+          @change=${(e) =>
+            this._updateTargetTime(index, "backgroundColor", e.target.value)}
+        ></ha-textfield>
+        <ha-icon-picker
+          .value=${targetTime.prefix}
+          @value-changed=${(e) =>
+            this._updateTargetTime(index, "prefix", e.detail.value)}
+        ></ha-icon-picker>
+        <ha-icon-button
+          .path=${"M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z"}
+          @click=${() => this._removeTargetTime(index)}
+        ></ha-icon-button>
+      </div>
+    `;
+  }
+
+  _addTargetTime() {
+    this._config = {
+      ...this._config,
+      targetTimes: [
+        ...this._config.targetTimes,
+        { entity: "", backgroundColor: "", prefix: "" },
+      ],
+    };
+    this._valueChanged();
+  }
+
+  _removeTargetTime(index) {
+    this._config = {
+      ...this._config,
+      targetTimes: this._config.targetTimes.filter((_, i) => i !== index),
+    };
+    this._valueChanged();
+  }
+
+  _updateTargetTime(index, key, value) {
+    this._config = {
+      ...this._config,
+      targetTimes: this._config.targetTimes.map((item, i) =>
+        i === index ? { ...item, [key]: value } : item
+      ),
+    };
+    this._valueChanged();
+  }
+
   _valueChanged(ev) {
-    const config = ev.detail.value;
-    this._config = config;
+    if (ev) {
+      // This handles changes from ha-form
+      this._config = { ...this._config, ...ev.detail.value };
+    }
+
+    const newConfig = { ...this._config };
+
+    // Ensure nested objects are properly updated
+    if (ev && ev.detail.value.entities) {
+      newConfig.entities = {
+        ...this._config.entities,
+        ...ev.detail.value.entities,
+      };
+    }
+    if (ev && ev.detail.value.display) {
+      newConfig.display = {
+        ...this._config.display,
+        ...ev.detail.value.display,
+      };
+    }
+    if (ev && ev.detail.value.limits) {
+      newConfig.limits = { ...this._config.limits, ...ev.detail.value.limits };
+    }
+    if (ev && ev.detail.value.colours) {
+      newConfig.colours = {
+        ...this._config.colours,
+        ...ev.detail.value.colours,
+      };
+    }
+
+    this._config = newConfig;
+
     this.dispatchEvent(
-      new CustomEvent("config-changed", { detail: { config } })
+      new CustomEvent("config-changed", { detail: { config: this._config } })
     );
   }
 }
@@ -388,6 +586,6 @@ window.customCards = window.customCards || [];
 window.customCards.push({
   type: "octopus-energy-rates-card",
   name: "Octopus Energy Rates Card",
-  preview: false,
-  description: "This card displays the energy rates for Octopus Energy",
+  preview: true,
+  description: "Displays the energy rates for Octopus Energy",
 });

@@ -23,7 +23,11 @@ class OctopusEnergyRatesCard extends LitElement {
     if (!config.entities || !config.entities.current) {
       throw new Error("You need to define a current entity");
     }
-    this._config = { ...OctopusEnergyRatesCard.getDefaultConfig(), ...config };
+    this._config = {
+      ...OctopusEnergyRatesCard.getDefaultConfig(),
+      ...config,
+      colorThresholds: config.colorThresholds || []
+    };
   }
 
   static getDefaultConfig() {
@@ -263,6 +267,10 @@ class OctopusEnergyRatesCard extends LitElement {
   }
 
   getRateColor(rate) {
+    if (!this._config.colorThresholds || this._config.colorThresholds.length === 0) {
+      return "#000000"; // Default color if no thresholds are defined
+    }
+
     // Create a copy of the colorThresholds array to avoid modifying the original
     const sortedThresholds = [...this._config.colorThresholds].sort((a, b) => a.value - b.value);
 
@@ -304,193 +312,172 @@ class OctopusEnergyRatesCardEditor extends LitElement {
       <ha-form
         .hass=${this.hass}
         .data=${this._config}
-        .schema=${[
-        { name: "title", label: "Card Title", selector: { text: {} } },
-        {
-          type: "expandable",
-          name: "entities",
-          title: "Entities",
-          icon: "mdi:lightning-bolt",
-          schema: [
-            {
-              name: "current",
-              label: "Current Rates Entity",
-              selector: { entity: { filter: { domain: "sensor" } } },
-              required: true,
-            },
-            {
-              name: "past",
-              label: "Past Rates Entity",
-              selector: { entity: { filter: { domain: "sensor" } } },
-            },
-            {
-              name: "future",
-              label: "Future Rates Entity",
-              selector: { entity: { filter: { domain: "sensor" } } },
-            },
-          ],
-        },
-        {
-          type: "expandable",
-          name: "display",
-          title: "Display Options",
-          icon: "mdi:eye",
-          schema: [
-            {
-              type: "grid",
-              columns: 2,
-              schema: [
-                {
-                  name: "cols",
-                  label: "Columns",
-                  selector: { number: { min: 1, max: 3 } },
-                },
-                {
-                  name: "roundUnits",
-                  label: "Decimal places",
-                  selector: { number: { min: 0, max: 3, mode: "slider" } },
-                },
-              ],
-            },
-            {
-              type: "grid",
-              columns: 3,
-              schema: [
-                {
-                  name: "showpast",
-                  label: "Show Past",
-                  selector: { boolean: {} },
-                },
-                {
-                  name: "showday",
-                  label: "Day Label",
-                  selector: { boolean: {} },
-                },
-                {
-                  name: "hour12",
-                  label: "12hr Time?",
-                  selector: { boolean: {} },
-                },
-              ],
-            },
-          ],
-        },
-      ]}
+        .schema=${this._getSchema()}
         .computeLabel=${(schema) => schema.label || schema.name}
         @value-changed=${this._valueChanged}
       ></ha-form>
-      <div class="colorThresholds">
-        <h3>Color Thresholds</h3>
-        ${this._config.colorThresholds.map((threshold, index) => this._renderColorThreshold(threshold, index))}
-        <ha-icon-button
-          .label=${"Add Color Threshold"}
-          .path=${"M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z"}
-          @click=${this._addColorThreshold}
-        ></ha-icon-button>
-      </div>
-      <div class="targetTimes">
-        <h3>Target Times</h3>
-        ${this._config.targetTimes.map((targetTime, index) => this._renderTargetTime(targetTime, index))}
-        <ha-icon-button
-          .label=${"Add Target Time"}
-          .path=${"M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z"}
-          @click=${this._addTargetTime}
-        ></ha-icon-button>
-      </div>
     `;
   }
 
-  _renderColorThreshold(threshold, index) {
-    return html`
-      <div class="colorThreshold">
-        <ha-textfield
-          .value=${threshold.value}
-          label="Threshold Value"
-          type="number"
-          @change=${(e) => this._updateColorThreshold(index, "value", parseFloat(e.target.value))}
-        ></ha-textfield>
-        <ha-textfield
-          .value=${threshold.color}
-          label="Color"
-          @change=${(e) => this._updateColorThreshold(index, "color", e.target.value)}
-        ></ha-textfield>
-        <ha-icon-button
-          .label=${"Remove"}
-          .path=${"M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z"}
-          @click=${() => this._removeColorThreshold(index)}
-        ></ha-icon-button>
-      </div>
-    `;
-  }
-
-  _renderTargetTime(targetTime, index) {
-    return html`
-      <div class="targetTime">
-        <ha-entity-picker
-          .hass=${this.hass}
-          .value=${targetTime.entity}
-          .includeDomains=${["binary_sensor"]}
-          @change=${(e) => this._updateTargetTime(index, "entity", e.target.value)}
-        ></ha-entity-picker>
-        <ha-textfield
-          .value=${targetTime.backgroundColor}
-          label="Background Color"
-          @change=${(e) => this._updateTargetTime(index, "backgroundColor", e.target.value)}
-        ></ha-textfield>
-        <ha-icon-picker
-          .value=${targetTime.prefix}
-          @value-changed=${(e) => this._updateTargetTime(index, "prefix", e.detail.value)}
-        ></ha-icon-picker>
-        <ha-icon-button
-          .label=${"Remove"}
-          .path=${"M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z"}
-          @click=${() => this._removeTargetTime(index)}
-        ></ha-icon-button>
-      </div>
-    `;
-  }
-
-  _addColorThreshold() {
-    this._config.colorThresholds = [
-      ...this._config.colorThresholds,
-      { value: 0, color: "#000000" },
+  _getSchema() {
+    return [
+      { name: "title", label: "Card Title", selector: { text: {} } },
+      {
+        type: "expandable",
+        name: "entities",
+        title: "Entities",
+        icon: "mdi:lightning-bolt",
+        schema: [
+          {
+            name: "current",
+            label: "Current Rates Entity",
+            selector: { entity: { filter: { domain: "sensor" } } },
+            required: true,
+          },
+          {
+            name: "past",
+            label: "Past Rates Entity",
+            selector: { entity: { filter: { domain: "sensor" } } },
+          },
+          {
+            name: "future",
+            label: "Future Rates Entity",
+            selector: { entity: { filter: { domain: "sensor" } } },
+          },
+        ],
+      },
+      {
+        type: "expandable",
+        name: "display",
+        title: "Display Options",
+        icon: "mdi:eye",
+        schema: [
+          {
+            type: "grid",
+            columns: 2,
+            schema: [
+              {
+                name: "cols",
+                label: "Columns",
+                selector: { number: { min: 1, max: 3 } },
+              },
+              {
+                name: "roundUnits",
+                label: "Decimal places",
+                selector: { number: { min: 0, max: 3, mode: "slider" } },
+              },
+            ],
+          },
+          {
+            type: "grid",
+            columns: 3,
+            schema: [
+              {
+                name: "showpast",
+                label: "Show Past",
+                selector: { boolean: {} },
+              },
+              {
+                name: "showday",
+                label: "Day Label",
+                selector: { boolean: {} },
+              },
+              {
+                name: "hour12",
+                label: "12hr Time?",
+                selector: { boolean: {} },
+              },
+            ],
+          },
+        ],
+      },
+      {
+        type: "expandable",
+        name: "colorThresholds",
+        title: "Color Thresholds",
+        icon: "mdi:palette",
+        schema: [
+          {
+            type: "grid",
+            columns: 2,
+            schema: (this._config.colorThresholds || []).map((_, index) => [
+              {
+                name: `colorThresholds.${index}.value`,
+                label: "Threshold Value",
+                selector: { number: { mode: "box" } },
+              },
+              {
+                name: `colorThresholds.${index}.color`,
+                label: "Color",
+                selector: { color_rgb: {} },
+              },
+            ]).flat(),
+          },
+          {
+            type: "button",
+            name: "add_color_threshold",
+            label: "Add Color Threshold",
+            action: "add_color_threshold",
+          },
+        ],
+      },
+      {
+        type: "expandable",
+        name: "targetTimes",
+        title: "Target Times",
+        icon: "mdi:clock-outline",
+        schema: [
+          ...(this._config.targetTimes || []).map((_, index) => ({
+            type: "grid",
+            columns: 3,
+            schema: [
+              {
+                name: `targetTimes.${index}.entity`,
+                label: "Entity",
+                selector: { entity: { filter: { domain: "binary_sensor" } } },
+              },
+              {
+                name: `targetTimes.${index}.backgroundColor`,
+                label: "Background Color",
+                selector: { color_rgb: {} },
+              },
+              {
+                name: `targetTimes.${index}.prefix`,
+                label: "Icon",
+                selector: { icon: {} },
+              },
+            ],
+          })),
+          {
+            type: "button",
+            name: "add_target_time",
+            label: "Add Target Time",
+            action: "add_target_time",
+          },
+        ],
+      },
     ];
-    this._valueChanged();
   }
 
-  _updateColorThreshold(index, key, value) {
-    this._config.colorThresholds = this._config.colorThresholds.map((item, i) =>
-      i === index ? { ...item, [key]: value } : item
-    );
-    this._valueChanged();
-  }
+  _valueChanged(ev) {
+    if (ev.detail.value) {
+      const newConfig = { ...this._config };
 
-  _removeColorThreshold(index) {
-    this._config.colorThresholds = this._config.colorThresholds.filter((_, i) => i !== index);
-    this._valueChanged();
-  }
+      if (ev.detail.value.add_color_threshold === "add_color_threshold") {
+        newConfig.colorThresholds = [...(newConfig.colorThresholds || []), { value: 0, color: "#000000" }];
+      } else if (ev.detail.value.add_target_time === "add_target_time") {
+        newConfig.targetTimes = [...(newConfig.targetTimes || []), { entity: "", backgroundColor: "", prefix: "" }];
+      } else {
+        Object.assign(newConfig, ev.detail.value);
+        // Handle nested updates for colorThresholds and targetTimes
+        newConfig.colorThresholds = this._updateNestedArray(newConfig.colorThresholds, ev.detail.value, 'colorThresholds');
+        newConfig.targetTimes = this._updateNestedArray(newConfig.targetTimes, ev.detail.value, 'targetTimes');
+      }
 
-  _addTargetTime() {
-    this._config.targetTimes = [
-      ...this._config.targetTimes,
-      { entity: "", backgroundColor: "", prefix: "" },
-    ];
-    this._valueChanged();
-  }
+      this._config = newConfig;
+      this.requestUpdate();
+    }
 
-  _updateTargetTime(index, key, value) {
-    this._config.targetTimes = this._config.targetTimes.map((item, i) =>
-      i === index ? { ...item, [key]: value } : item
-    );
-    this._valueChanged();
-  }
-
-  _removeTargetTime(index) {
-    this._config.targetTimes = this._config.targetTimes.filter((_, i) => i !== index);
-    this._valueChanged();
-  }
-
-  _valueChanged() {
     const event = new CustomEvent("config-changed", {
       detail: { config: this._config },
       bubbles: true,
@@ -499,36 +486,28 @@ class OctopusEnergyRatesCardEditor extends LitElement {
     this.dispatchEvent(event);
   }
 
-  static get styles() {
-    return css`
-      .colorThresholds,
-      .targetTimes {
-        border: 1px solid var(--divider-color);
-        padding: 10px;
-        margin-top: 10px;
-      }
-      .colorThreshold,
-      .targetTime {
-        display: flex;
-        align-items: center;
-        margin-bottom: 10px;
-      }
-      .colorThreshold > *,
-      .targetTime > * {
-        margin-right: 10px;
-      }
-      ha-icon-button {
-        --mdc-icon-button-size: 24px;
-      }
-    `;
+  _updateNestedArray(array, changes, prefix) {
+    if (!Array.isArray(array)) {
+      array = [];
+    }
+    return array.map((item, index) => {
+      const updatedItem = { ...item };
+      Object.keys(changes).forEach(key => {
+        if (key.startsWith(`${prefix}.${index}.`)) {
+          const property = key.split('.')[2];
+          updatedItem[property] = changes[key];
+        }
+      });
+      return updatedItem;
+    });
   }
 }
 
+customElements.define("octopus-energy-rates-card-editor", OctopusEnergyRatesCardEditor);
+
+
 customElements.define("octopus-energy-rates-card", OctopusEnergyRatesCard);
-customElements.define(
-  "octopus-energy-rates-card-editor",
-  OctopusEnergyRatesCardEditor
-);
+
 
 window.customCards = window.customCards || [];
 window.customCards.push({

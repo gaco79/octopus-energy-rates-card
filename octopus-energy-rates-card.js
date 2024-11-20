@@ -64,7 +64,6 @@ export class OctopusEnergyRatesCard extends LitElement {
     const allRates = [...pastRates, ...currentRates, ...futureRates];
     const filteredRates = getFilteredRates(allRates, this._config.display.showpast);
     const columns = splitIntoColumns(filteredRates, this._config);
-    console.log("columns", columns);
 
     return html`
       <ha-card header="${this._config.title}">

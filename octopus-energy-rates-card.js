@@ -1,7 +1,7 @@
 import { LitElement, html, css } from "https://unpkg.com/lit-element@2.4.0/lit-element.js?module";
 import { getDefaultConfig } from './config/default-config.js';
-import { getRatesFromStateObj, getFilteredRates, getRateColor } from './utils/rate-utils.js';
-import { RateColumn } from './components/rate-column.js';
+import { getRatesFromStateObj, getFilteredRates, splitIntoColumns } from './utils/rate-utils.js';
+import './components/rate-column.js';
 import { OctopusEnergyRatesCardEditor } from "./components/editor.js";
 
 export class OctopusEnergyRatesCard extends LitElement {
@@ -31,15 +31,10 @@ export class OctopusEnergyRatesCard extends LitElement {
   static get styles() {
     return css`
       :host {
-        display: block;
-        padding: 16px;
       }
       .card-content {
-        padding: 0 16px 16px;
-      }
-      .rate-columns {
         display: flex;
-        justify-content: space-between;
+        justify-content: space-around;
       }
     `;
   }
@@ -68,12 +63,12 @@ export class OctopusEnergyRatesCard extends LitElement {
 
     const allRates = [...pastRates, ...currentRates, ...futureRates];
     const filteredRates = getFilteredRates(allRates, this._config.display.showpast);
-    const columns = this.splitIntoColumns(filteredRates);
+    const columns = splitIntoColumns(filteredRates, this._config);
+    console.log("columns", columns);
 
     return html`
       <ha-card header="${this._config.title}">
         <div class="card-content">
-          <div class="rate-columns">
             ${columns.map(column => html`
               <rate-column
                 .rates=${column}
@@ -81,39 +76,9 @@ export class OctopusEnergyRatesCard extends LitElement {
                 .hass=${this.hass}
               ></rate-column>
             `)}
-          </div>
         </div>
       </ha-card>
     `;
-  }
-
-  splitIntoColumns(rates) {
-    const cols = this._config.display.cols || 1;
-    const columns = Array.from({ length: cols }, () => []);
-    rates.forEach((rate, index) => {
-      columns[index % cols].push(rate);
-    });
-    return columns;
-  }
-
-  getTargetTime(start, end) {
-    for (const tt of this._config.targetTimes) {
-      const entityState = this.hass.states[tt.entity];
-      if (entityState?.attributes.target_times) {
-        const targetTimes = entityState.attributes.target_times;
-        for (const targetTime of targetTimes) {
-          const targetStart = new Date(targetTime.start);
-          const targetEnd = new Date(targetTime.end);
-          if (start >= targetStart && end <= targetEnd) {
-            return {
-              backgroundColor: tt.backgroundColor,
-              prefix: tt.prefix,
-            };
-          }
-        }
-      }
-    }
-    return null;
   }
 
   static getConfigElement() {
@@ -123,6 +88,7 @@ export class OctopusEnergyRatesCard extends LitElement {
 
 customElements.define("octopus-energy-rates-card", OctopusEnergyRatesCard);
 customElements.define("octopus-energy-rates-card-editor", OctopusEnergyRatesCardEditor);
+
 
 window.customCards = window.customCards || [];
 window.customCards.push({

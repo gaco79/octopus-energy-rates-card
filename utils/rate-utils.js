@@ -23,3 +23,12 @@ export const getRateColor = (rate, colorThresholds) => {
     const threshold = sortedThresholds.find(t => rate <= t.value);
     return threshold?.color || sortedThresholds[sortedThresholds.length - 1].color;
 };
+
+export const splitIntoColumns = (rates, config) => {
+    const cols = config.display.cols || 1;
+    const columns = Array.from({ length: cols }, () => []);
+    rates.forEach((rate, index) => {
+        columns[index % cols].push(rate);
+    });
+    return columns;
+};

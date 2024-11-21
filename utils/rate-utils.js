@@ -17,7 +17,7 @@ export const getFilteredRates = (rates, showpast) => {
 };
 
 export const getRateColor = (rate, colorThresholds) => {
-    if (!colorThresholds?.length) return "#000000";
+    if (!colorThresholds?.length) return "#331100";
 
     const sortedThresholds = [...colorThresholds].sort((a, b) => a.value - b.value);
     const threshold = sortedThresholds.find(t => rate <= t.value);

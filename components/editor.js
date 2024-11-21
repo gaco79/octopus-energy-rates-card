@@ -1,5 +1,6 @@
 import { LitElement, html } from "https://unpkg.com/lit-element@2.4.0/lit-element.js?module";
 import { getDefaultConfig } from '../config/default-config.js';
+import "./mgc_list.js";
 
 export class OctopusEnergyRatesCardEditor extends LitElement {
     static get properties() {
@@ -102,6 +103,22 @@ export class OctopusEnergyRatesCardEditor extends LitElement {
                             },
                         ],
                     },
+                ],
+            },
+            {
+                name: "colorThresholds",
+                type: "mgc-list",
+                schema: [
+                    {
+                        name: "value",
+                        label: "Threshold Value",
+                        selector: { number: { mode: "box" } },
+                    },
+                    {
+                        name: "color",
+                        label: "Color",
+                        selector: { text: {} },
+                    }
                 ],
             },
             {

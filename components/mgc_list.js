@@ -72,6 +72,7 @@ class MGCList extends LitElement {
 
   addRow(ev) {
     ev.stopPropagation();
+    console.log("Add row");
     const value = {};
     if (!Array.isArray(this.data)) {
       this.fireEvent('value-changed', { value: [value] });
